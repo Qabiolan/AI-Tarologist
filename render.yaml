@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ai-tarologist
+    runtime: docker
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: TELEGRAMBOTTOKEN
+        sync: false
+      - key: APIKEY
+        sync: false
+      - key: APIURL
+        value: https://openrouter.ai/api/v1/chat/completions
+      - key: REDIS_ADDR
+        value: ""
+      - key: REDIS_PASSWORD
+        value: ""
+      - key: PORT
+        value: 8080
