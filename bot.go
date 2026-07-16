@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"bot/components/chatgpt"
@@ -57,7 +58,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// WebApp URL - will be set to the Render domain
 	webAppURL := os.Getenv("WEBAPP_URL")
 	if webAppURL == "" {
 		webAppURL = "https://pushup-impart-unwrapped.ngrok-free.dev"
@@ -76,19 +76,56 @@ func main() {
 		return ctx.Send(message.StartText, mainMenu)
 	})
 
+	// Свободный чат — отвечаем на любой вопрос
 	bot.Handle(tele.OnText, func(ctx tele.Context) error {
 		state, err := RedisClient.Getter(redisCtx, "State")
 		if err != nil {
-			panic(err)
+			state = "default"
 		}
+
+		// Если ждём информацию о пользователе
 		if state == "infoWait" {
 			userInfo := ctx.Text()
 			if err := RedisClient.UpdateFieldUser(redisCtx, int(ctx.Sender().ID), "info", userInfo, 24*30*time.Hour); err != nil {
 				panic(err)
 			}
-			return ctx.Send("✨ Спасибо за информацию! Теперь нажми кнопку «Открыть Таро» внизу, чтобы получить свой расклад.", mainMenu)
+			if err := RedisClient.Setter(redisCtx, "State", "default", 10*time.Minute); err != nil {
+				panic(err)
+			}
+			return ctx.Send("✨ Спасибо за информацию! Теперь я знаю о тебе больше.\n\nМожешь задавать любые вопросы — я отвечу как опытный таролог. Или нажми «🔮 Открыть Таро» для расклада.", mainMenu)
 		}
-		return ctx.Send("Нажми кнопку «Открыть Таро» внизу, чтобы начать расклад ✨", mainMenu)
+
+		// Свободный чат — отправляем запрос к AI
+		text := ctx.Text()
+		if strings.TrimSpace(text) == "" {
+			return nil
+		}
+
+		// Получаем информацию о пользователе для контекста
+		user, _ := RedisClient.ReadUser(redisCtx, int(ctx.Sender().ID))
+		userInfo := user.Info
+		if userInfo == " " || userInfo == "" {
+			userInfo = "Информация о пользователе не предоставлена"
+		}
+
+		ctx.Send("🔮 Думаю над ответом...")
+
+		resp := chatgpt.RequestOpenAiWithContext(text, userInfo)
+		maxLen := 4096
+		for i := 0; i < len(resp); i += maxLen {
+			end := i + maxLen
+			if end > len(resp) {
+				end = len(resp)
+			}
+			part := resp[i:end]
+			if i == 0 {
+				// First part — send without "typing" prefix
+				ctx.Send(part)
+			} else {
+				ctx.Send(part)
+			}
+		}
+		return nil
 	})
 
 	bot.Handle("/menu", func(ctx tele.Context) error {
