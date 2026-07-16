@@ -27,7 +27,6 @@ type WebAppData struct {
 
 type UserData struct {
 	Name         string
-	FullName     string
 	BirthDate    string
 	BirthTime    string
 	BirthPlace   string
@@ -185,9 +184,21 @@ func main() {
 			}
 
 		case "free_chat":
-			if text == "🔮 Общая характеристика" || text == "☀️ Расклад на сегодня" || text == "📅 Расклад на неделю" || text == "📆 Расклад на месяц" || text == "🌟 Расклад на год" {
+			if text == "🔮 Общая характеристика" {
 				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
-				return handleSpread(ctx, userData, text, RedisClient, redisCtx, userID)
+				return handleSpread(ctx, userData, "general", RedisClient, redisCtx, userID)
+			} else if text == "☀️ Расклад на сегодня" {
+				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
+				return handleSpread(ctx, userData, "daily", RedisClient, redisCtx, userID)
+			} else if text == "📅 Расклад на неделю" {
+				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
+				return handleSpread(ctx, userData, "weekly", RedisClient, redisCtx, userID)
+			} else if text == "📆 Расклад на месяц" {
+				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
+				return handleSpread(ctx, userData, "monthly", RedisClient, redisCtx, userID)
+			} else if text == "🌟 Расклад на год" {
+				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
+				return handleSpread(ctx, userData, "yearly", RedisClient, redisCtx, userID)
 			}
 			return handleFreeChat(ctx, userData, text, RedisClient, redisCtx, userID)
 
@@ -289,23 +300,23 @@ func handleSpread(ctx tele.Context, userData *UserData, spreadType string, Redis
 
 	switch spreadType {
 	case "general":
-		prompt = fmt.Sprintf(message.StarsRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.StarsRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("🔮 Общая характеристика для %s", userData.Name)
 	case "daily":
-		prompt = fmt.Sprintf(message.DailyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.DailyRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("☀️ Расклад на сегодня для %s", userData.Name)
 	case "weekly":
-		prompt = fmt.Sprintf(message.WeeklyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.WeeklyRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("📅 Расклад на неделю для %s", userData.Name)
 	case "monthly":
-		prompt = fmt.Sprintf(message.MonthlyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.MonthlyRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("📆 Расклад на месяц для %s", userData.Name)
 	case "yearly":
-		prompt = fmt.Sprintf(message.YearlyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.YearlyRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("🌟 Расклад на год для %s", userData.Name)
 	}
@@ -332,7 +343,7 @@ func handleFreeChat(ctx tele.Context, userData *UserData, text string, RedisClie
 	ctx.Send("🔮 Думаю над ответом...")
 
 	userInfo := fmt.Sprintf("Имя: %s, Дата рождения: %s, Время рождения: %s, Место рождения: %s",
-		userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
 
 	resp := chatgpt.RequestOpenAiWithContext(text, userInfo)
 	maxLen := 4096
