@@ -275,13 +275,13 @@ func handleSpread(ctx tele.Context, userData *UserData, spreadType string, Redis
 		cardCount = 5
 	}
 
-	// Draw random cards
-	cards := tarot.GetRandomCards(cardCount)
+	// Draw random cards with keys for image lookup
+	cards, cardKeys := tarot.GetRandomCardsWithKeys(cardCount)
 
 	// Send card images
 	ctx.Send("🔮 Раскладываю карты...")
-	for _, card := range cards {
-		imagePath := tarot.GetCardImagePath(card.Name)
+	for i, card := range cards {
+		imagePath := tarot.GetCardImagePathByKey(cardKeys[i])
 		if imagePath != "" {
 			// Send image with card name
 			photo := &tele.Photo{
