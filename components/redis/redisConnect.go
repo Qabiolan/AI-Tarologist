@@ -13,7 +13,7 @@ import (
 	redis "github.com/redis/go-redis/v9"
 )
 
-type redisClient struct {
+type RedisClient struct {
 	client *redis.Client
 }
 
@@ -30,10 +30,10 @@ var memStore = &memoryStore{
 
 var config = configReader.Readconfig()
 
-func NewClient() *redisClient {
+func NewClient() *RedisClient {
 	// If Redis is not configured, use in-memory store
 	if config.REDIS_ADDR == "" {
-		return &redisClient{
+		return &RedisClient{
 			client: nil,
 		}
 	}
@@ -43,12 +43,12 @@ func NewClient() *redisClient {
 		Password: config.REDIS_PASSWORD,
 		DB:       0,
 	})
-	return &redisClient{
+	return &RedisClient{
 		client: rdb,
 	}
 }
 
-func (r *redisClient) Setter(ctx context.Context, key string, value string, expiration time.Duration) error {
+func (r *RedisClient) Setter(ctx context.Context, key string, value string, expiration time.Duration) error {
 	if r.client == nil {
 		memStore.mu.Lock()
 		defer memStore.mu.Unlock()
@@ -58,7 +58,7 @@ func (r *redisClient) Setter(ctx context.Context, key string, value string, expi
 	return r.client.Set(ctx, key, value, expiration).Err()
 }
 
-func (r *redisClient) Getter(ctx context.Context, key string) (string, error) {
+func (r *RedisClient) Getter(ctx context.Context, key string) (string, error) {
 	if r.client == nil {
 		memStore.mu.RLock()
 		defer memStore.mu.RUnlock()
@@ -70,7 +70,7 @@ func (r *redisClient) Getter(ctx context.Context, key string) (string, error) {
 	return r.client.Get(ctx, key).Result()
 }
 
-func (r *redisClient) SetNewUser(
+func (r *RedisClient) SetNewUser(
 	ctx context.Context,
 	ID int,
 	Username string,
@@ -93,7 +93,7 @@ func (r *redisClient) SetNewUser(
 	return r.client.Set(ctx, strconv.Itoa(ID), new_user, expiration).Err()
 }
 
-func (r *redisClient) UpdateFieldUser(
+func (r *RedisClient) UpdateFieldUser(
 	ctx context.Context,
 	ID int,
 	field string,
@@ -179,7 +179,7 @@ func (r *redisClient) UpdateFieldUser(
 	return r.client.Set(ctx, key, updatedUserData, expiration).Err()
 }
 
-func (r *redisClient) ReadUser(ctx context.Context, id int) (models.User, error) {
+func (r *RedisClient) ReadUser(ctx context.Context, id int) (models.User, error) {
 	key := strconv.Itoa(id)
 
 	if r.client == nil {
@@ -202,7 +202,7 @@ func (r *redisClient) ReadUser(ctx context.Context, id int) (models.User, error)
 	return user, nil
 }
 
-func (r *redisClient) GetUser(ctx context.Context, key string) (models.User, error) {
+func (r *RedisClient) GetUser(ctx context.Context, key string) (models.User, error) {
 	if r.client == nil {
 		memStore.mu.RLock()
 		defer memStore.mu.RUnlock()
