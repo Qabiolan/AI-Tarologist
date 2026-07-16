@@ -11,6 +11,7 @@ import (
 
 	"bot/components/chatgpt"
 	"bot/components/keyboards"
+	"bot/components/tarot"
 	message "bot/components/message"
 	r "bot/components/redis"
 	configReader "bot/config"
@@ -25,15 +26,14 @@ type WebAppData struct {
 }
 
 type UserData struct {
-	Name        string
-	FullName    string
-	BirthDate   string
-	BirthTime   string
-	BirthPlace  string
+	Name         string
+	FullName     string
+	BirthDate    string
+	BirthTime    string
+	BirthPlace   string
 	InfoCollected bool
 }
 
-// Хранилище данных пользователей (в памяти для простоты)
 var userStorage = make(map[int]*UserData)
 
 func getUserData(userID int) *UserData {
@@ -44,6 +44,11 @@ func getUserData(userID int) *UserData {
 }
 
 func main() {
+	// Load tarot deck
+	if err := tarot.LoadDeck(); err != nil {
+		fmt.Printf("Warning: Could not load tarot deck: %v\n", err)
+	}
+
 	go func() {
 		port := os.Getenv("PORT")
 		if port == "" {
@@ -51,6 +56,10 @@ func main() {
 		}
 		fs := http.FileServer(http.Dir("./miniapp"))
 		http.Handle("/", fs)
+
+		// Serve tarot card images
+		http.Handle("/tarot_cards/", http.StripPrefix("/tarot_cards/", http.FileServer(http.Dir("./tarot_cards"))))
+
 		fmt.Printf("🌙 Mini App server running on port %s\n", port)
 		if err := http.ListenAndServe(":"+port, nil); err != nil {
 			fmt.Printf("Mini App server error: %v\n", err)
@@ -78,7 +87,6 @@ func main() {
 
 	mainMenu := keyboards.CreateMainMenu(webAppURL)
 
-	// Клавиатура для выбора расклада
 	spreadMenu := &tele.ReplyMarkup{ResizeKeyboard: true}
 	btnGeneral := spreadMenu.Text("🔮 Общая характеристика")
 	btnDaily := spreadMenu.Text("☀️ Расклад на сегодня")
@@ -93,21 +101,20 @@ func main() {
 		spreadMenu.Row(btnChat),
 	)
 
-	// Состояния диалога
 	const (
-		StateNone         = "none"
-		StateWaitName     = "wait_name"
-		StateWaitFullName = "wait_full_name"
+		StateNone          = "none"
+		StateWaitName      = "wait_name"
+		StateWaitFullName  = "wait_full_name"
 		StateWaitBirthDate = "wait_birth_date"
 		StateWaitBirthTime = "wait_birth_time"
 		StateWaitBirthPlace = "wait_birth_place"
-		StateReady        = "ready"
+		StateReady         = "ready"
 	)
 
 	bot.Handle("/start", func(ctx tele.Context) error {
 		userID := int(ctx.Sender().ID)
 		userData := getUserData(userID)
-		*userData = UserData{} // Reset
+		*userData = UserData{}
 
 		if err := RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitName, 30*time.Minute); err != nil {
 			fmt.Println(err)
@@ -120,7 +127,6 @@ func main() {
 		userID := int(ctx.Sender().ID)
 		text := ctx.Text()
 
-		// Получаем состояние
 		state, _ := RedisClient.Getter(redisCtx, fmt.Sprintf("state_%d", userID))
 		if state == "" {
 			state = StateNone
@@ -154,7 +160,6 @@ func main() {
 			userData.InfoCollected = true
 			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
 
-			// Сохраняем полную информацию в Redis
 			fullInfo := fmt.Sprintf("Имя: %s, Полное имя: %s, Дата рождения: %s, Время рождения: %s, Место рождения: %s",
 				userData.Name, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
 			RedisClient.UpdateFieldUser(redisCtx, userID, "info", fullInfo, 24*30*time.Hour)
@@ -169,7 +174,6 @@ func main() {
 			return ctx.Send(thankYou, spreadMenu)
 
 		case StateReady:
-			// Обработка выбора расклада или свободный чат
 			if text == "🔮 Общая характеристика" {
 				return handleSpread(ctx, userData, "general", RedisClient, redisCtx, userID)
 			} else if text == "☀️ Расклад на сегодня" {
@@ -184,19 +188,17 @@ func main() {
 				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), "free_chat", 30*time.Minute)
 				return ctx.Send("💬 Режим свободного чата активирован!\nЗадавай любые вопросы — я отвечу как опытный таролог.\n\nДля возврата к раскладам нажми /start", spreadMenu)
 			} else {
-				// Свободный чат даже в режиме Ready
 				return handleFreeChat(ctx, userData, text, RedisClient, redisCtx, userID)
 			}
 
 		case "free_chat":
 			if text == "🔮 Общая характеристика" || text == "☀️ Расклад на сегодня" || text == "📅 Расклад на неделю" || text == "📆 Расклад на месяц" || text == "🌟 Расклад на год" {
 				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
-				return handleSpread(ctx, userData, strings.TrimLeft(strings.TrimRight(text, " "), " "), RedisClient, redisCtx, userID)
+				return handleSpread(ctx, userData, text, RedisClient, redisCtx, userID)
 			}
 			return handleFreeChat(ctx, userData, text, RedisClient, redisCtx, userID)
 
 		default:
-			// Если данные уже собраны — свободный чат
 			if userData.InfoCollected {
 				return handleFreeChat(ctx, userData, text, RedisClient, redisCtx, userID)
 			}
@@ -230,36 +232,19 @@ func main() {
 			return ctx.Send("Сначала пройди знакомство! Отправь /start")
 		}
 
-		var prompt string
-		var title string
-
+		var spreadType string
 		switch webAppData.Service {
 		case "stars":
-			prompt = fmt.Sprintf(message.StarsRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
-			title = fmt.Sprintf("🔮 Общая характеристика для %s", userData.Name)
+			spreadType = "general"
 		case "natal":
-			prompt = fmt.Sprintf(message.DailyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
-			title = fmt.Sprintf("☀️ Расклад на сегодня для %s", userData.Name)
+			spreadType = "daily"
 		case "advice":
-			prompt = fmt.Sprintf(message.WeeklyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
-			title = fmt.Sprintf("📅 Расклад на неделю для %s", userData.Name)
+			spreadType = "weekly"
 		default:
 			return ctx.Send("Неизвестная услуга.")
 		}
 
-		ctx.Send(title)
-		ctx.Send("Карты раскладываются... ✨")
-
-		resp := chatgpt.RequestOpenAi(prompt)
-		maxLen := 4096
-		for i := 0; i < len(resp); i += maxLen {
-			end := i + maxLen
-			if end > len(resp) {
-				end = len(resp)
-			}
-			ctx.Send(resp[i:end])
-		}
-		return ctx.Send("🌟 Обращайтесь ещё!")
+		return handleSpread(ctx, userData, spreadType, RedisClient, redisCtx, userID)
 	})
 
 	fmt.Println("🤖 AI Таролог бот запущен!")
@@ -271,26 +256,64 @@ func handleSpread(ctx tele.Context, userData *UserData, spreadType string, Redis
 		return ctx.Send("Сначала пройди знакомство! Отправь /start")
 	}
 
-	ctx.Send("🔮 Раскладываю карты, ожидайте...")
+	// Determine how many cards to draw
+	cardCount := 1
+	switch spreadType {
+	case "daily":
+		cardCount = 3
+	case "weekly":
+		cardCount = 7
+	case "monthly":
+		cardCount = 4
+	case "yearly":
+		cardCount = 12
+	case "general":
+		cardCount = 5
+	}
 
+	// Draw random cards
+	cards := tarot.GetRandomCards(cardCount)
+
+	// Send card images
+	ctx.Send("🔮 Раскладываю карты...")
+	for _, card := range cards {
+		imagePath := tarot.GetCardImagePath(card.Name)
+		if imagePath != "" {
+			// Send image with card name
+			photo := &tele.Photo{
+				File:    tele.FromDisk(imagePath),
+				Caption: fmt.Sprintf("✨ %s (%s)", card.Name, card.Number),
+			}
+			ctx.Send(photo)
+			time.Sleep(500 * time.Millisecond) // Small delay for better UX
+		}
+	}
+
+	// Generate prompt with cards
+	cardsText := tarot.FormatCardsForPrompt(cards)
 	var prompt string
 	var title string
 
 	switch spreadType {
 	case "general":
 		prompt = fmt.Sprintf(message.StarsRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("🔮 Общая характеристика для %s", userData.Name)
 	case "daily":
 		prompt = fmt.Sprintf(message.DailyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("☀️ Расклад на сегодня для %s", userData.Name)
 	case "weekly":
 		prompt = fmt.Sprintf(message.WeeklyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("📅 Расклад на неделю для %s", userData.Name)
 	case "monthly":
 		prompt = fmt.Sprintf(message.MonthlyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("📆 Расклад на месяц для %s", userData.Name)
 	case "yearly":
 		prompt = fmt.Sprintf(message.YearlyRequest, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
 		title = fmt.Sprintf("🌟 Расклад на год для %s", userData.Name)
 	}
 
