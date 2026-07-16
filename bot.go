@@ -104,7 +104,6 @@ func main() {
 	const (
 		StateNone          = "none"
 		StateWaitName      = "wait_name"
-		StateWaitFullName  = "wait_full_name"
 		StateWaitBirthDate = "wait_birth_date"
 		StateWaitBirthTime = "wait_birth_time"
 		StateWaitBirthPlace = "wait_birth_place"
@@ -137,11 +136,6 @@ func main() {
 		switch state {
 		case StateWaitName:
 			userData.Name = strings.TrimSpace(text)
-			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitFullName, 30*time.Minute)
-			return ctx.Send(fmt.Sprintf(message.AskFullName, userData.Name))
-
-		case StateWaitFullName:
-			userData.FullName = strings.TrimSpace(text)
 			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitBirthDate, 30*time.Minute)
 			return ctx.Send(fmt.Sprintf(message.AskBirthDate, userData.Name))
 
@@ -160,13 +154,12 @@ func main() {
 			userData.InfoCollected = true
 			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
 
-			fullInfo := fmt.Sprintf("Имя: %s, Полное имя: %s, Дата рождения: %s, Время рождения: %s, Место рождения: %s",
-				userData.Name, userData.FullName, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+			fullInfo := fmt.Sprintf("Имя: %s, Дата рождения: %s, Время рождения: %s, Место рождения: %s",
+				userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
 			RedisClient.UpdateFieldUser(redisCtx, userID, "info", fullInfo, 24*30*time.Hour)
 
 			thankYou := fmt.Sprintf(message.ThankYou,
 				userData.Name,
-				userData.FullName,
 				userData.BirthDate,
 				userData.BirthTime,
 				userData.BirthPlace,
