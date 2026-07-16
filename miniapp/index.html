@@ -25,6 +25,8 @@ body {
   color: var(--star-white);
   min-height: 100vh;
   overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   position: relative;
 }
 
@@ -592,6 +594,134 @@ body {
   color: var(--gold-light);
   text-align: center;
 }
+
+/* API Info Section */
+.api-section {
+  width: 100%;
+  max-width: 400px;
+  margin-top: 30px;
+  padding: 25px;
+  background: linear-gradient(135deg, rgba(45, 27, 78, 0.6), rgba(26, 10, 46, 0.8));
+  border: 1px solid rgba(212, 168, 67, 0.2);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+}
+
+.api-section h3 {
+  font-family: 'Marck Script', cursive;
+  font-size: 24px;
+  color: var(--gold);
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.api-block {
+  background: rgba(26, 10, 46, 0.5);
+  border: 1px solid rgba(212, 168, 67, 0.15);
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.api-block h4 {
+  font-family: 'Marck Script', cursive;
+  font-size: 18px;
+  color: var(--gold-light);
+  margin-bottom: 10px;
+}
+
+.api-block p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--star-white);
+  margin-bottom: 8px;
+}
+
+.api-diagram {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(212, 168, 67, 0.2);
+  border-radius: 8px;
+  padding: 15px;
+  text-align: center;
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--gold-light);
+  line-height: 1.8;
+}
+
+.api-code {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(212, 168, 67, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--gold-light);
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0;
+}
+
+.api-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.api-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(212, 168, 67, 0.1);
+  font-size: 13px;
+  color: var(--star-white);
+}
+
+.api-table td:first-child {
+  color: var(--gold-light);
+  white-space: nowrap;
+}
+
+.api-close {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-top: 15px;
+  background: linear-gradient(135deg, rgba(212, 168, 67, 0.3), rgba(74, 44, 110, 0.5));
+  border: 1px solid rgba(212, 168, 67, 0.4);
+  border-radius: 25px;
+  color: var(--gold-light);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.api-close:active {
+  transform: scale(0.97);
+  background: linear-gradient(135deg, rgba(212, 168, 67, 0.5), rgba(74, 44, 110, 0.7));
+}
+
+.api-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, rgba(212, 168, 67, 0.2), rgba(74, 44, 110, 0.4));
+  border: 1px solid rgba(212, 168, 67, 0.3);
+  border-radius: 25px;
+  color: var(--gold-light);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 20px;
+  transition: all 0.3s ease;
+}
+
+.api-toggle-btn:active {
+  transform: scale(0.95);
+  background: linear-gradient(135deg, rgba(212, 168, 67, 0.4), rgba(74, 44, 110, 0.6));
+}
+
 </style>
 </head>
 <body>
@@ -676,7 +806,90 @@ body {
       Я — AI-Таролог с более чем 10-летним стажем в таро и астрологии.
       Каждый расклад — это глубокий диалог с вашим внутренним миром через символику карт и мудрость звёзд.
     </p>
+  
+  <button class="api-toggle-btn" onclick="toggleApiInfo()">
+    <span>ℹ️</span> Как работает API
+  </button>
+
+</div>
+
+  <!-- Информация об API -->
+  <div class="api-section" id="apiSection" style="display:none;">
+    <h3>Как работает API</h3>
+    
+    <div class="api-block">
+      <h4>1. Архитектура</h4>
+      <div class="api-diagram">
+        Пользователь (Telegram)<br>↓<br>Бот (Go)<br>↓<br>OpenRouter API<br>↓<br>Google Gemma 4 26B<br>↓<br>Ответ AI<br>↓<br>Пользователь
+      </div>
+    </div>
+    
+    <div class="api-block">
+      <h4>2. OpenRouter API</h4>
+      <p>Агрегатор AI-моделей — доступ к 100+ моделям через один API.</p>
+      <p><strong>Endpoint:</strong> openrouter.ai/api/v1/chat/completions</p>
+      <p><strong>Модель:</strong> google/gemma-4-26b-a4b-it:free (бесплатно!)</p>
+    </div>
+    
+    <div class="api-block">
+      <h4>3. Формат запроса</h4>
+      <pre class="api-code">{
+  "model": "google/gemma-4-26b-a4b-it:free",
+  "messages": [
+    {"role": "system", "content": "Ты таролог..."},
+    {"role": "user", "content": "Вопрос"}
+  ]
+}</pre>
+    </div>
+    
+    <div class="api-block">
+      <h4>4. Роли сообщений</h4>
+      <table class="api-table">
+        <tr><td><strong>system</strong></td><td>Задаёт поведение AI</td></tr>
+        <tr><td><strong>user</strong></td><td>Вопрос пользователя</td></tr>
+        <tr><td><strong>assistant</strong></td><td>Ответы AI (контекст)</td></tr>
+      </table>
+    </div>
+    
+    <div class="api-block">
+      <h4>5. Формат ответа</h4>
+      <pre class="api-code">{
+  "choices": [{
+    "message": {"content": "🔮 Ответ..."}
+  }],
+  "usage": {"total_tokens": 240, "cost": 0}
+}</pre>
+    </div>
+    
+    <div class="api-block">
+      <h4>6. Две функции</h4>
+      <table class="api-table">
+        <tr><td><strong>RequestOpenAi()</strong></td><td>Расклады таро</td></tr>
+        <tr><td><strong>RequestOpenAiWithContext()</strong></td><td>Свободный чат с контекстом</td></tr>
+      </table>
+    </div>
+    
+    <div class="api-block">
+      <h4>7. Лимиты</h4>
+      <table class="api-table">
+        <tr><td>Стоимость</td><td><strong>0$</strong> (бесплатно)</td></tr>
+        <tr><td>Rate limit</td><td>~20 запросов/мин</td></tr>
+        <tr><td>Макс. токенов</td><td>~8192 на ответ</td></tr>
+      </table>
+    </div>
+    
+    <div class="api-block">
+      <h4>8. Доступные модели</h4>
+      <table class="api-table">
+        <tr><td>google/gemma-4-26b-a4b-it:free</td><td>Бесплатно</td></tr>
+        <tr><td>deepseek/deepseek-r1-0528</td><td>~$0.55/1M</td></tr>
+        <tr><td>openai/gpt-4o-mini</td><td>~$0.15/1M</td></tr>
+      </table>
+    </div>
+    
+    <button class="api-close" onclick="toggleApiInfo()">Закрыть</button>
   </div>
+
 </div>
 
 <!-- Загрузка -->
@@ -882,6 +1095,20 @@ function goBack() {
   } else {
     // Demo mode - go to main screen
     document.getElementById('resultScreen').classList.remove('active');
+  }
+}
+
+
+function toggleApiInfo() {
+  const apiSection = document.getElementById('apiSection');
+  if (apiSection.style.display === 'none' || apiSection.style.display === '') {
+    apiSection.style.display = 'block';
+    apiSection.scrollIntoView({ behavior: 'smooth' });
+  } else {
+    apiSection.style.display = 'none';
+  }
+  if (window.Telegram && window.Telegram.WebApp) {
+    window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
   }
 }
 
