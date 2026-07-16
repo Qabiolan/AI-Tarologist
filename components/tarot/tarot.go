@@ -107,7 +107,24 @@ func GetRandomMajorArcana(count int) []CardInfo {
 func GetCardImagePath(cardName string) string {
 	basePath := getBasePath()
 
-	// Search in all folders
+	// First, try to find by card name in the deck (Russian name)
+	if deck != nil {
+		// Search in all maps
+		allMaps := []map[string]CardInfo{deck.MajorArcana, deck.Wands, deck.Cups, deck.Swords, deck.Pentacles}
+		for _, cardMap := range allMaps {
+			for _, card := range cardMap {
+				if card.Name == cardName && card.Image != "" {
+					// Found the card, return the image path
+					path := filepath.Join(basePath, card.Image)
+					if _, err := os.Stat(path); err == nil {
+						return path
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback: search in all folders by English name
 	folders := []string{"major_arcana", "wands", "cups", "swords", "pentacles"}
 	for _, folder := range folders {
 		path := filepath.Join(basePath, "tarot_cards", folder, cardName+".jpg")
@@ -117,6 +134,70 @@ func GetCardImagePath(cardName string) string {
 	}
 
 	return ""
+}
+
+// GetCardImagePathByKey returns image path by card key (e.g., "0_The_Fool")
+func GetCardImagePathByKey(cardKey string) string {
+	basePath := getBasePath()
+
+	// Search in all folders
+	folders := []string{"major_arcana", "wands", "cups", "swords", "pentacles"}
+	for _, folder := range folders {
+		path := filepath.Join(basePath, "tarot_cards", folder, cardKey+".jpg")
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	return ""
+}
+
+// GetRandomCardsWithKeys returns random cards with their keys for image lookup
+func GetRandomCardsWithKeys(count int) ([]CardInfo, []string) {
+	if deck == nil {
+		LoadDeck()
+	}
+
+	// Collect all cards with their keys
+	type CardWithKey struct {
+		Card CardInfo
+		Key  string
+	}
+
+	var allCards []CardWithKey
+	for key, card := range deck.MajorArcana {
+		allCards = append(allCards, CardWithKey{card, key})
+	}
+	for key, card := range deck.Wands {
+		allCards = append(allCards, CardWithKey{card, key})
+	}
+	for key, card := range deck.Cups {
+		allCards = append(allCards, CardWithKey{card, key})
+	}
+	for key, card := range deck.Swords {
+		allCards = append(allCards, CardWithKey{card, key})
+	}
+	for key, card := range deck.Pentacles {
+		allCards = append(allCards, CardWithKey{card, key})
+	}
+
+	// Shuffle and pick
+	rand.Shuffle(len(allCards), func(i, j int) {
+		allCards[i], allCards[j] = allCards[j], allCards[i]
+	})
+
+	if count > len(allCards) {
+		count = len(allCards)
+	}
+
+	var cards []CardInfo
+	var keys []string
+	for i := 0; i < count; i++ {
+		cards = append(cards, allCards[i].Card)
+		keys = append(keys, allCards[i].Key)
+	}
+
+	return cards, keys
 }
 
 func GetCardByName(name string) *CardInfo {
