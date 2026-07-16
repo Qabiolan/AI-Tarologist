@@ -87,9 +87,46 @@ body {
 /* Header */
 .header {
   text-align: center;
-  margin-top: 40px;
+  margin-top: 20px;
   margin-bottom: 30px;
   animation: fadeInDown 1s ease-out;
+}
+
+/* Back button */
+.back-btn {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: rgba(45, 27, 78, 0.7);
+  border: 1px solid rgba(212, 168, 67, 0.3);
+  border-radius: 25px;
+  color: var(--gold-light);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.back-btn:active {
+  transform: scale(0.95);
+  background: rgba(212, 168, 67, 0.3);
+  border-color: var(--gold);
+}
+
+.back-arrow {
+  font-size: 18px;
+  transition: transform 0.2s ease;
+}
+
+.back-btn:active .back-arrow {
+  transform: translateX(-3px);
 }
 
 @keyframes fadeInDown {
@@ -562,6 +599,9 @@ body {
 <div class="stars-container" id="stars"></div>
 
 <div class="app-container" id="mainScreen">
+  <button class="back-btn" onclick="goBack()">
+    <span class="back-arrow">←</span> Назад в чат
+  </button>
   <div class="header">
     <div class="moon-icon">🌙</div>
     <h1 class="title">AI Таролог</h1>
@@ -648,6 +688,9 @@ body {
 
 <!-- Результат -->
 <div class="result-screen" id="resultScreen">
+  <button class="back-btn" onclick="goBack()">
+    <span class="back-arrow">←</span> Назад в чат
+  </button>
   <div class="result-header">
     <div class="result-card-icon" id="resultIcon">🌟</div>
     <h2 class="result-title" id="resultTitle">Ваш прогноз</h2>
@@ -829,6 +872,16 @@ function closeResult() {
   document.getElementById('resultScreen').classList.remove('active');
   if (window.Telegram && window.Telegram.WebApp) {
     window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+  }
+}
+
+function goBack() {
+  if (window.Telegram && window.Telegram.WebApp) {
+    window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+    window.Telegram.WebApp.close();
+  } else {
+    // Demo mode - go to main screen
+    document.getElementById('resultScreen').classList.remove('active');
   }
 }
 
