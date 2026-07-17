@@ -25,42 +25,35 @@ type WebAppData struct {
 	ZodiacIcon string `json:"zodiacIcon"`
 }
 
-type UserData struct {
-	Name         string
-	BirthDate    string
-	BirthTime    string
-	BirthPlace   string
-	InfoCollected bool
+type UserSession struct {
+	State         string `json:"state"`
+	Name          string `json:"name"`
+	BirthDate     string `json:"birthDate"`
+	BirthTime     string `json:"birthTime"`
+	BirthPlace    string `json:"birthPlace"`
+	InfoCollected bool   `json:"infoCollected"`
 }
 
-// Save user data to Redis
-func saveUserData(r *r.RedisClient, ctx context.Context, userID int, data *UserData) {
-	key := fmt.Sprintf("user_%d", userID)
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		fmt.Printf("Error marshaling user data: %v\n", err)
-		return
-	}
-	r.Setter(ctx, key, string(dataBytes), 24*30*time.Hour)
+func saveSession(r *r.RedisClient, ctx context.Context, userID int, session *UserSession) {
+	key := fmt.Sprintf("session_%d", userID)
+	data, _ := json.Marshal(session)
+	r.Setter(ctx, key, string(data), 24*30*time.Hour)
 }
 
-// Load user data from Redis
-func loadUserData(r *r.RedisClient, ctx context.Context, userID int) *UserData {
-	key := fmt.Sprintf("user_%d", userID)
-	dataJSON, err := r.Getter(ctx, key)
-	if err != nil || dataJSON == "" {
-		return &UserData{}
+func loadSession(r *r.RedisClient, ctx context.Context, userID int) *UserSession {
+	key := fmt.Sprintf("session_%d", userID)
+	data, err := r.Getter(ctx, key)
+	if err != nil || data == "" {
+		return &UserSession{State: "none"}
 	}
-	data := &UserData{}
-	if err := json.Unmarshal([]byte(dataJSON), data); err != nil {
-		fmt.Printf("Error unmarshaling user data: %v\n", err)
-		return &UserData{}
+	session := &UserSession{}
+	if err := json.Unmarshal([]byte(data), session); err != nil {
+		return &UserSession{State: "none"}
 	}
-	return data
+	return session
 }
 
 func main() {
-	// Load tarot deck
 	if err := tarot.LoadDeck(); err != nil {
 		fmt.Printf("Warning: Could not load tarot deck: %v\n", err)
 	}
@@ -72,10 +65,7 @@ func main() {
 		}
 		fs := http.FileServer(http.Dir("./miniapp"))
 		http.Handle("/", fs)
-
-		// Serve tarot card images
 		http.Handle("/tarot_cards/", http.StripPrefix("/tarot_cards/", http.FileServer(http.Dir("./tarot_cards"))))
-
 		fmt.Printf("🌙 Mini App server running on port %s\n", port)
 		if err := http.ListenAndServe(":"+port, nil); err != nil {
 			fmt.Printf("Mini App server error: %v\n", err)
@@ -117,116 +107,65 @@ func main() {
 		spreadMenu.Row(btnChat),
 	)
 
-	const (
-		StateNone          = "none"
-		StateWaitName      = "wait_name"
-		StateWaitBirthDate = "wait_birth_date"
-		StateWaitBirthTime = "wait_birth_time"
-		StateWaitBirthPlace = "wait_birth_place"
-		StateReady         = "ready"
-	)
-
 	bot.Handle("/start", func(ctx tele.Context) error {
 		userID := int(ctx.Sender().ID)
-		// Reset user data in Redis
-		emptyData := &UserData{}
-		saveUserData(RedisClient, redisCtx, userID, emptyData)
-
-		if err := RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitName, 30*time.Minute); err != nil {
-			fmt.Println(err)
-		}
-
+		session := &UserSession{State: "wait_name"}
+		saveSession(RedisClient, redisCtx, userID, session)
 		return ctx.Send(message.StartText)
 	})
 
 	bot.Handle(tele.OnText, func(ctx tele.Context) error {
 		userID := int(ctx.Sender().ID)
 		text := ctx.Text()
+		session := loadSession(RedisClient, redisCtx, userID)
 
-		state, _ := RedisClient.Getter(redisCtx, fmt.Sprintf("state_%d", userID))
-		if state == "" {
-			state = StateNone
-		}
+		switch session.State {
+		case "wait_name":
+			session.Name = strings.TrimSpace(text)
+			session.State = "wait_birth_date"
+			saveSession(RedisClient, redisCtx, userID, session)
+			return ctx.Send(fmt.Sprintf(message.AskBirthDate, session.Name))
 
-		userData := loadUserData(RedisClient, redisCtx, userID)
+		case "wait_birth_date":
+			session.BirthDate = strings.TrimSpace(text)
+			session.State = "wait_birth_time"
+			saveSession(RedisClient, redisCtx, userID, session)
+			return ctx.Send(fmt.Sprintf(message.AskBirthTime, session.Name))
 
-		switch state {
-		case StateWaitName:
-			userData.Name = strings.TrimSpace(text)
-			saveUserData(RedisClient, redisCtx, userID, userData)
-			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitBirthDate, 30*time.Minute)
-			return ctx.Send(fmt.Sprintf(message.AskBirthDate, userData.Name))
+		case "wait_birth_time":
+			session.BirthTime = strings.TrimSpace(text)
+			session.State = "wait_birth_place"
+			saveSession(RedisClient, redisCtx, userID, session)
+			return ctx.Send(fmt.Sprintf(message.AskBirthPlace, session.Name))
 
-		case StateWaitBirthDate:
-			userData.BirthDate = strings.TrimSpace(text)
-			saveUserData(RedisClient, redisCtx, userID, userData)
-			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitBirthTime, 30*time.Minute)
-			return ctx.Send(fmt.Sprintf(message.AskBirthTime, userData.Name))
-
-		case StateWaitBirthTime:
-			userData.BirthTime = strings.TrimSpace(text)
-			saveUserData(RedisClient, redisCtx, userID, userData)
-			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitBirthPlace, 30*time.Minute)
-			return ctx.Send(fmt.Sprintf(message.AskBirthPlace, userData.Name))
-
-		case StateWaitBirthPlace:
-			userData.BirthPlace = strings.TrimSpace(text)
-			userData.InfoCollected = true
-			saveUserData(RedisClient, redisCtx, userID, userData)
-			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
-
-			fullInfo := fmt.Sprintf("Имя: %s, Дата рождения: %s, Время рождения: %s, Место рождения: %s",
-				userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
-			RedisClient.UpdateFieldUser(redisCtx, userID, "info", fullInfo, 24*30*time.Hour)
+		case "wait_birth_place":
+			session.BirthPlace = strings.TrimSpace(text)
+			session.InfoCollected = true
+			session.State = "ready"
+			saveSession(RedisClient, redisCtx, userID, session)
 
 			thankYou := fmt.Sprintf(message.ThankYou,
-				userData.Name,
-				userData.BirthDate,
-				userData.BirthTime,
-				userData.BirthPlace,
+				session.Name,
+				session.BirthDate,
+				session.BirthTime,
+				session.BirthPlace,
 			)
 			return ctx.Send(thankYou, spreadMenu)
 
-		case StateReady:
-			if text == "🔮 Общая характеристика" {
-				return handleSpread(ctx, userData, "general", RedisClient, redisCtx, userID)
-			} else if text == "☀️ Расклад на сегодня" {
-				return handleSpread(ctx, userData, "daily", RedisClient, redisCtx, userID)
-			} else if text == "📅 Расклад на неделю" {
-				return handleSpread(ctx, userData, "weekly", RedisClient, redisCtx, userID)
-			} else if text == "📆 Расклад на месяц" {
-				return handleSpread(ctx, userData, "monthly", RedisClient, redisCtx, userID)
-			} else if text == "🌟 Расклад на год" {
-				return handleSpread(ctx, userData, "yearly", RedisClient, redisCtx, userID)
-			} else if text == "💬 Свободный чат" {
-				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), "free_chat", 30*time.Minute)
-				return ctx.Send("💬 Режим свободного чата активирован!\nЗадавай любые вопросы — я отвечу как опытный таролог.\n\nДля возврата к раскладам нажми /start", spreadMenu)
-			} else {
-				return handleFreeChat(ctx, userData, text, RedisClient, redisCtx, userID)
-			}
+		case "ready":
+			return handleButton(ctx, session, text, spreadMenu, RedisClient, redisCtx, userID)
 
 		case "free_chat":
-			if text == "🔮 Общая характеристика" {
-				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
-				return handleSpread(ctx, userData, "general", RedisClient, redisCtx, userID)
-			} else if text == "☀️ Расклад на сегодня" {
-				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
-				return handleSpread(ctx, userData, "daily", RedisClient, redisCtx, userID)
-			} else if text == "📅 Расклад на неделю" {
-				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
-				return handleSpread(ctx, userData, "weekly", RedisClient, redisCtx, userID)
-			} else if text == "📆 Расклад на месяц" {
-				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
-				return handleSpread(ctx, userData, "monthly", RedisClient, redisCtx, userID)
-			} else if text == "🌟 Расклад на год" {
-				RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
-				return handleSpread(ctx, userData, "yearly", RedisClient, redisCtx, userID)
+			if isSpreadButton(text) {
+				session.State = "ready"
+				saveSession(RedisClient, redisCtx, userID, session)
+				return handleButton(ctx, session, text, spreadMenu, RedisClient, redisCtx, userID)
 			}
-			return handleFreeChat(ctx, userData, text, RedisClient, redisCtx, userID)
+			return handleFreeChat(ctx, session, text, RedisClient, redisCtx)
 
 		default:
-			if userData.InfoCollected {
-				return handleFreeChat(ctx, userData, text, RedisClient, redisCtx, userID)
+			if session.InfoCollected {
+				return handleFreeChat(ctx, session, text, RedisClient, redisCtx)
 			}
 			return ctx.Send("Нажми /start чтобы начать знакомство ✨", mainMenu)
 		}
@@ -252,9 +191,9 @@ func main() {
 		}
 
 		userID := int(ctx.Sender().ID)
-		userData := loadUserData(RedisClient, redisCtx, userID)
+		session := loadSession(RedisClient, redisCtx, userID)
 
-		if !userData.InfoCollected {
+		if !session.InfoCollected {
 			return ctx.Send("Сначала пройди знакомство! Отправь /start")
 		}
 
@@ -270,19 +209,55 @@ func main() {
 			return ctx.Send("Неизвестная услуга.")
 		}
 
-		return handleSpread(ctx, userData, spreadType, RedisClient, redisCtx, userID)
+		return handleSpread(ctx, session, spreadType, RedisClient, redisCtx, userID)
 	})
 
 	fmt.Println("🤖 AI Таролог бот запущен!")
 	bot.Start()
 }
 
-func handleSpread(ctx tele.Context, userData *UserData, spreadType string, RedisClient *r.RedisClient, redisCtx context.Context, userID int) error {
-	if !userData.InfoCollected {
+func isSpreadButton(text string) bool {
+	buttons := []string{
+		"🔮 Общая характеристика",
+		"☀️ Расклад на сегодня",
+		"📅 Расклад на неделю",
+		"📆 Расклад на месяц",
+		"🌟 Расклад на год",
+	}
+	for _, btn := range buttons {
+		if text == btn {
+			return true
+		}
+	}
+	return false
+}
+
+func handleButton(ctx tele.Context, session *UserSession, text string, spreadMenu *tele.ReplyMarkup, RedisClient *r.RedisClient, redisCtx context.Context, userID int) error {
+	switch text {
+	case "🔮 Общая характеристика":
+		return handleSpread(ctx, session, "general", RedisClient, redisCtx, userID)
+	case "☀️ Расклад на сегодня":
+		return handleSpread(ctx, session, "daily", RedisClient, redisCtx, userID)
+	case "📅 Расклад на неделю":
+		return handleSpread(ctx, session, "weekly", RedisClient, redisCtx, userID)
+	case "📆 Расклад на месяц":
+		return handleSpread(ctx, session, "monthly", RedisClient, redisCtx, userID)
+	case "🌟 Расклад на год":
+		return handleSpread(ctx, session, "yearly", RedisClient, redisCtx, userID)
+	case "💬 Свободный чат":
+		session.State = "free_chat"
+		saveSession(RedisClient, redisCtx, userID, session)
+		return ctx.Send("💬 Режим свободного чата активирован!\nЗадавай любые вопросы — я отвечу как опытный таролог.\n\nДля возврата к раскладам нажми /start", spreadMenu)
+	default:
+		return handleFreeChat(ctx, session, text, RedisClient, redisCtx)
+	}
+}
+
+func handleSpread(ctx tele.Context, session *UserSession, spreadType string, RedisClient *r.RedisClient, redisCtx context.Context, userID int) error {
+	if !session.InfoCollected {
 		return ctx.Send("Сначала пройди знакомство! Отправь /start")
 	}
 
-	// Determine how many cards to draw
 	cardCount := 1
 	switch spreadType {
 	case "daily":
@@ -297,50 +272,46 @@ func handleSpread(ctx tele.Context, userData *UserData, spreadType string, Redis
 		cardCount = 5
 	}
 
-	// Draw random cards with keys for image lookup
 	cards, cardKeys := tarot.GetRandomCardsWithKeys(cardCount)
 
-	// Send card images
 	ctx.Send("🔮 Раскладываю карты...")
 	for i, card := range cards {
 		imagePath := tarot.GetCardImagePathByKey(cardKeys[i])
 		if imagePath != "" {
-			// Send image with card name
 			photo := &tele.Photo{
 				File:    tele.FromDisk(imagePath),
 				Caption: fmt.Sprintf("✨ %s (%s)", card.Name, card.Number),
 			}
 			ctx.Send(photo)
-			time.Sleep(500 * time.Millisecond) // Small delay for better UX
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 
-	// Generate prompt with cards
 	cardsText := tarot.FormatCardsForPrompt(cards)
 	var prompt string
 	var title string
 
 	switch spreadType {
 	case "general":
-		prompt = fmt.Sprintf(message.StarsRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.StarsRequest, session.Name, session.BirthDate, session.BirthTime, session.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
-		title = fmt.Sprintf("🔮 Общая характеристика для %s", userData.Name)
+		title = fmt.Sprintf("🔮 Общая характеристика для %s", session.Name)
 	case "daily":
-		prompt = fmt.Sprintf(message.DailyRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.DailyRequest, session.Name, session.BirthDate, session.BirthTime, session.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
-		title = fmt.Sprintf("☀️ Расклад на сегодня для %s", userData.Name)
+		title = fmt.Sprintf("☀️ Расклад на сегодня для %s", session.Name)
 	case "weekly":
-		prompt = fmt.Sprintf(message.WeeklyRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.WeeklyRequest, session.Name, session.BirthDate, session.BirthTime, session.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
-		title = fmt.Sprintf("📅 Расклад на неделю для %s", userData.Name)
+		title = fmt.Sprintf("📅 Расклад на неделю для %s", session.Name)
 	case "monthly":
-		prompt = fmt.Sprintf(message.MonthlyRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.MonthlyRequest, session.Name, session.BirthDate, session.BirthTime, session.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
-		title = fmt.Sprintf("📆 Расклад на месяц для %s", userData.Name)
+		title = fmt.Sprintf("📆 Расклад на месяц для %s", session.Name)
 	case "yearly":
-		prompt = fmt.Sprintf(message.YearlyRequest, userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		prompt = fmt.Sprintf(message.YearlyRequest, session.Name, session.BirthDate, session.BirthTime, session.BirthPlace)
 		prompt += "\n\n" + cardsText + "\n\nУчитывай выпавшие карты в своём толковании."
-		title = fmt.Sprintf("🌟 Расклад на год для %s", userData.Name)
+		title = fmt.Sprintf("🌟 Расклад на год для %s", session.Name)
 	}
 
 	ctx.Send(title)
@@ -357,7 +328,7 @@ func handleSpread(ctx tele.Context, userData *UserData, spreadType string, Redis
 	return ctx.Send("🌟 Обращайтесь ещё!")
 }
 
-func handleFreeChat(ctx tele.Context, userData *UserData, text string, RedisClient *r.RedisClient, redisCtx context.Context, userID int) error {
+func handleFreeChat(ctx tele.Context, session *UserSession, text string, RedisClient *r.RedisClient, redisCtx context.Context) error {
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
@@ -365,7 +336,7 @@ func handleFreeChat(ctx tele.Context, userData *UserData, text string, RedisClie
 	ctx.Send("🔮 Думаю над ответом...")
 
 	userInfo := fmt.Sprintf("Имя: %s, Дата рождения: %s, Время рождения: %s, Место рождения: %s",
-		userData.Name, userData.BirthDate, userData.BirthTime, userData.BirthPlace)
+		session.Name, session.BirthDate, session.BirthTime, session.BirthPlace)
 
 	resp := chatgpt.RequestOpenAiWithContext(text, userInfo)
 	maxLen := 4096
