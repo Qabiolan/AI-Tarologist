@@ -33,6 +33,48 @@ type UserData struct {
 	InfoCollected bool
 }
 
+// Save user data to Redis
+func saveUserData(r *r.RedisClient, ctx context.Context, userID int, data *UserData) {
+	key := fmt.Sprintf("user_%d", userID)
+	dataJSON := fmt.Sprintf(`{"Name":"%s","BirthDate":"%s","BirthTime":"%s","BirthPlace":"%s","InfoCollected":%v}`,
+		data.Name, data.BirthDate, data.BirthTime, data.BirthPlace, data.InfoCollected)
+	r.Setter(ctx, key, dataJSON, 24*30*time.Hour)
+}
+
+// Load user data from Redis
+func loadUserData(r *r.RedisClient, ctx context.Context, userID int) *UserData {
+	key := fmt.Sprintf("user_%d", userID)
+	dataJSON, err := r.Getter(ctx, key)
+	if err != nil || dataJSON == "" {
+		return &UserData{}
+	}
+	data := &UserData{}
+	// Simple JSON parsing
+	dataJSON = strings.TrimPrefix(dataJSON, "{")
+	dataJSON = strings.TrimSuffix(dataJSON, "}")
+	pairs := strings.Split(dataJSON, ",")
+	for _, pair := range pairs {
+		kv := strings.SplitN(pair, ":", 2)
+		if len(kv) == 2 {
+			k := strings.Trim(kv[0], "\" ")
+			v := strings.Trim(kv[1], "\" ")
+			switch k {
+			case "Name":
+				data.Name = v
+			case "BirthDate":
+				data.BirthDate = v
+			case "BirthTime":
+				data.BirthTime = v
+			case "BirthPlace":
+				data.BirthPlace = v
+			case "InfoCollected":
+				data.InfoCollected = v == "true"
+			}
+		}
+	}
+	return data
+}
+
 var userStorage = make(map[int]*UserData)
 
 func getUserData(userID int) *UserData {
@@ -111,8 +153,9 @@ func main() {
 
 	bot.Handle("/start", func(ctx tele.Context) error {
 		userID := int(ctx.Sender().ID)
-		userData := getUserData(userID)
-		*userData = UserData{}
+		// Reset user data in Redis
+		emptyData := &UserData{}
+		saveUserData(RedisClient, redisCtx, userID, emptyData)
 
 		if err := RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitName, 30*time.Minute); err != nil {
 			fmt.Println(err)
@@ -130,27 +173,31 @@ func main() {
 			state = StateNone
 		}
 
-		userData := getUserData(userID)
+		userData := loadUserData(RedisClient, redisCtx, userID)
 
 		switch state {
 		case StateWaitName:
 			userData.Name = strings.TrimSpace(text)
+			saveUserData(RedisClient, redisCtx, userID, userData)
 			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitBirthDate, 30*time.Minute)
 			return ctx.Send(fmt.Sprintf(message.AskBirthDate, userData.Name))
 
 		case StateWaitBirthDate:
 			userData.BirthDate = strings.TrimSpace(text)
+			saveUserData(RedisClient, redisCtx, userID, userData)
 			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitBirthTime, 30*time.Minute)
 			return ctx.Send(fmt.Sprintf(message.AskBirthTime, userData.Name))
 
 		case StateWaitBirthTime:
 			userData.BirthTime = strings.TrimSpace(text)
+			saveUserData(RedisClient, redisCtx, userID, userData)
 			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateWaitBirthPlace, 30*time.Minute)
 			return ctx.Send(fmt.Sprintf(message.AskBirthPlace, userData.Name))
 
 		case StateWaitBirthPlace:
 			userData.BirthPlace = strings.TrimSpace(text)
 			userData.InfoCollected = true
+			saveUserData(RedisClient, redisCtx, userID, userData)
 			RedisClient.Setter(redisCtx, fmt.Sprintf("state_%d", userID), StateReady, 30*time.Minute)
 
 			fullInfo := fmt.Sprintf("Имя: %s, Дата рождения: %s, Время рождения: %s, Место рождения: %s",
@@ -230,7 +277,7 @@ func main() {
 		}
 
 		userID := int(ctx.Sender().ID)
-		userData := getUserData(userID)
+		userData := loadUserData(RedisClient, redisCtx, userID)
 
 		if !userData.InfoCollected {
 			return ctx.Send("Сначала пройди знакомство! Отправь /start")
