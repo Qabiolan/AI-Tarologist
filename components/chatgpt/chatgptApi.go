@@ -56,7 +56,7 @@ func RequestOpenAi(message string) string {
 	api_key := configReader.Readconfig().APIKEY
 	client := &http.Client{}
 	var stringData = fmt.Sprintf(`{
-  "model": "google/gemma-4-26b-a4b-it:free",
+  "model": "tencent/hy3:free",
   "messages": [
     {
       "role": "system",
@@ -110,7 +110,7 @@ func RequestOpenAiWithContext(message string, userInfo string) string {
 	contextMsg := fmt.Sprintf("Информация о пользователе: %s\n\nВопрос пользователя: %s", userInfo, message)
 
 	var stringData = fmt.Sprintf(`{
-  "model": "google/gemma-4-26b-a4b-it:free",
+  "model": "tencent/hy3:free",
   "messages": [
     {
       "role": "system",
