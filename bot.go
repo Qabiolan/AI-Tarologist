@@ -81,7 +81,7 @@ func main() {
 
 	webAppURL := os.Getenv("WEBAPP_URL")
 	if webAppURL == "" {
-		webAppURL = "https://pushup-impart-unwrapped.ngrok-free.dev"
+		webAppURL = "https://ai-tarologist-pjck.onrender.com"
 	}
 
 	mainMenu := keyboards.CreateMainMenu(webAppURL)
