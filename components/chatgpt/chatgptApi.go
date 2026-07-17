@@ -71,23 +71,27 @@ func RequestOpenAi(message string) string {
 	var data = strings.NewReader(stringData)
 	req, err := http.NewRequest("POST", "https://openrouter.ai/api/v1/chat/completions", data)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error creating request: %v", err)
+		return "Ошибка при создании запроса. Попробуйте позже."
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+api_key)
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error making request: %v", err)
+		return "Ошибка при обращении к API. Попробуйте позже."
 	}
 	defer resp.Body.Close()
 	bodyText, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error reading response: %v", err)
+		return "Ошибка при чтении ответа. Попробуйте позже."
 	}
 	var chatCompletion ChatCompletion
 	log.Println(string(bodyText))
 	if err := json.Unmarshal([]byte(bodyText), &chatCompletion); err != nil {
-		panic(err)
+		log.Printf("Error parsing response: %v", err)
+		return "Ошибка при обработке ответа. Попробуйте позже."
 	}
 	log.Println(chatCompletion)
 	choises := chatCompletion.Choices
@@ -121,22 +125,26 @@ func RequestOpenAiWithContext(message string, userInfo string) string {
 	var data = strings.NewReader(stringData)
 	req, err := http.NewRequest("POST", "https://openrouter.ai/api/v1/chat/completions", data)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error creating request: %v", err)
+		return "Ошибка при создании запроса. Попробуйте позже."
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+api_key)
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error making request: %v", err)
+		return "Ошибка при обращении к API. Попробуйте позже."
 	}
 	defer resp.Body.Close()
 	bodyText, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error reading response: %v", err)
+		return "Ошибка при чтении ответа. Попробуйте позже."
 	}
 	var chatCompletion ChatCompletion
 	if err := json.Unmarshal([]byte(bodyText), &chatCompletion); err != nil {
-		panic(err)
+		log.Printf("Error parsing response: %v", err)
+		return "Ошибка при обработке ответа. Попробуйте позже."
 	}
 	choises := chatCompletion.Choices
 	if len(choises) > 0 {
