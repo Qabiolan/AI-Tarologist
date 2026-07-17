@@ -36,9 +36,12 @@ type UserData struct {
 // Save user data to Redis
 func saveUserData(r *r.RedisClient, ctx context.Context, userID int, data *UserData) {
 	key := fmt.Sprintf("user_%d", userID)
-	dataJSON := fmt.Sprintf(`{"Name":"%s","BirthDate":"%s","BirthTime":"%s","BirthPlace":"%s","InfoCollected":%v}`,
-		data.Name, data.BirthDate, data.BirthTime, data.BirthPlace, data.InfoCollected)
-	r.Setter(ctx, key, dataJSON, 24*30*time.Hour)
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		fmt.Printf("Error marshaling user data: %v\n", err)
+		return
+	}
+	r.Setter(ctx, key, string(dataBytes), 24*30*time.Hour)
 }
 
 // Load user data from Redis
@@ -49,39 +52,11 @@ func loadUserData(r *r.RedisClient, ctx context.Context, userID int) *UserData {
 		return &UserData{}
 	}
 	data := &UserData{}
-	// Simple JSON parsing
-	dataJSON = strings.TrimPrefix(dataJSON, "{")
-	dataJSON = strings.TrimSuffix(dataJSON, "}")
-	pairs := strings.Split(dataJSON, ",")
-	for _, pair := range pairs {
-		kv := strings.SplitN(pair, ":", 2)
-		if len(kv) == 2 {
-			k := strings.Trim(kv[0], "\" ")
-			v := strings.Trim(kv[1], "\" ")
-			switch k {
-			case "Name":
-				data.Name = v
-			case "BirthDate":
-				data.BirthDate = v
-			case "BirthTime":
-				data.BirthTime = v
-			case "BirthPlace":
-				data.BirthPlace = v
-			case "InfoCollected":
-				data.InfoCollected = v == "true"
-			}
-		}
+	if err := json.Unmarshal([]byte(dataJSON), data); err != nil {
+		fmt.Printf("Error unmarshaling user data: %v\n", err)
+		return &UserData{}
 	}
 	return data
-}
-
-var userStorage = make(map[int]*UserData)
-
-func getUserData(userID int) *UserData {
-	if _, ok := userStorage[userID]; !ok {
-		userStorage[userID] = &UserData{}
-	}
-	return userStorage[userID]
 }
 
 func main() {
