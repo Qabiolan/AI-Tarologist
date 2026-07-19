@@ -19,12 +19,8 @@ RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
-# Copy binary and miniapp
+# Copy binary
 COPY --from=builder /app/ai-tarologist .
-COPY --from=builder /app/miniapp ./miniapp
-
-# Expose port for Mini App
-EXPOSE 8080
 
 # Run the bot
 CMD ["./ai-tarologist"]
