@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"bot/components/chatgpt"
-	"bot/components/keyboards"
 	"bot/components/tarot"
 	message "bot/components/message"
 	r "bot/components/redis"
@@ -18,12 +16,6 @@ import (
 
 	tele "gopkg.in/telebot.v4"
 )
-
-type WebAppData struct {
-	Service    string `json:"service"`
-	Zodiac     string `json:"zodiac"`
-	ZodiacIcon string `json:"zodiacIcon"`
-}
 
 type UserSession struct {
 	State         string `json:"state"`
@@ -58,20 +50,6 @@ func main() {
 		fmt.Printf("Warning: Could not load tarot deck: %v\n", err)
 	}
 
-	go func() {
-		port := os.Getenv("PORT")
-		if port == "" {
-			port = "8080"
-		}
-		fs := http.FileServer(http.Dir("./miniapp"))
-		http.Handle("/", fs)
-		http.Handle("/tarot_cards/", http.StripPrefix("/tarot_cards/", http.FileServer(http.Dir("./tarot_cards"))))
-		fmt.Printf("🌙 Mini App server running on port %s\n", port)
-		if err := http.ListenAndServe(":"+port, nil); err != nil {
-			fmt.Printf("Mini App server error: %v\n", err)
-		}
-	}()
-
 	bot_token := configReader.Readconfig().BOTTOKEN
 	pref := tele.Settings{
 		Token:  bot_token,
@@ -85,13 +63,6 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-
-	webAppURL := os.Getenv("WEBAPP_URL")
-	if webAppURL == "" {
-		webAppURL = "https://ai-tarologist-pjck.onrender.com"
-	}
-
-	mainMenu := keyboards.CreateMainMenu(webAppURL)
 
 	spreadMenu := &tele.ReplyMarkup{ResizeKeyboard: true}
 	btnGeneral := spreadMenu.Text("🔮 Общая характеристика")
@@ -167,49 +138,12 @@ func main() {
 			if session.InfoCollected {
 				return handleFreeChat(ctx, session, text, RedisClient, redisCtx)
 			}
-			return ctx.Send("Нажми /start чтобы начать знакомство ✨", mainMenu)
+			return ctx.Send("Нажми /start чтобы начать знакомство ✨")
 		}
 	})
 
 	bot.Handle("/menu", func(ctx tele.Context) error {
 		return ctx.Send("Выбери расклад:", spreadMenu)
-	})
-
-	bot.Handle(tele.OnWebApp, func(ctx tele.Context) error {
-		msg := ctx.Message()
-		if msg == nil || msg.WebAppData == nil {
-			return ctx.Send("Не удалось получить данные.")
-		}
-		data := msg.WebAppData.Data
-		if data == "" {
-			return ctx.Send("Не удалось получить данные.")
-		}
-
-		var webAppData WebAppData
-		if err := json.Unmarshal([]byte(data), &webAppData); err != nil {
-			return ctx.Send("Ошибка обработки данных.")
-		}
-
-		userID := int(ctx.Sender().ID)
-		session := loadSession(RedisClient, redisCtx, userID)
-
-		if !session.InfoCollected {
-			return ctx.Send("Сначала пройди знакомство! Отправь /start")
-		}
-
-		var spreadType string
-		switch webAppData.Service {
-		case "stars":
-			spreadType = "general"
-		case "natal":
-			spreadType = "daily"
-		case "advice":
-			spreadType = "weekly"
-		default:
-			return ctx.Send("Неизвестная услуга.")
-		}
-
-		return handleSpread(ctx, session, spreadType, RedisClient, redisCtx, userID)
 	})
 
 	fmt.Println("🤖 AI Таролог бот запущен!")
